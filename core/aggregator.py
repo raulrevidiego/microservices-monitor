@@ -161,7 +161,7 @@ class MetricsAggregator:
     Los modelos Pydantic son inmutables por defecto, que es exactamente lo que queremos en un sistema concurrente."""
     async def _collect_service(self, config: ServiceConfig) -> ServiceMetric:
 
-        async def _empty_logs() -> tuple[int, list]:  # ✅ reemplaza asyncio.coroutine eliminado en Python 3.11
+        async def _empty_logs() -> tuple[int, list]: 
             return 0, []
 
         metrics_task = asyncio.create_task(
