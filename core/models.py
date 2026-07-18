@@ -16,9 +16,9 @@ el enum AlertLevel"""
 y cogémos las métricas que nos inetresan de cada proceso"""
 class MetricType(str, Enum):
     CPU = "CPU"
-    Memory = "Memory"
-    Disk = "Disk"
-    Network = "Network"
+    MEMORY = "MEMORY"
+    DISK = "DISK"
+    NETWORK = "NETWORK"
 class AlertLevel(str, Enum):
     INFO = "INFO"
     WARNING = "WARNING"

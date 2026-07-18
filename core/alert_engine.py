@@ -9,11 +9,11 @@ from uuid import uuid4
 from core.models import (
     AlertEvent,
     AlertRule,
-    AlertSeverity,
+    AlertLevel,
     AlertStatus,
     MetricSnapshot,
     MetricType,
-    ServiceMetrics,
+    ServiceMetric,
 )
 
 logger = logging.getLogger(__name__)
@@ -22,10 +22,10 @@ logger = logging.getLogger(__name__)
 """Esta función usa un dicccionario de lamdas como tabla dispatch en lugar de un bloque if/elif, esto permite añadir nuevos tipos de métricas sin modificar la función, 
 solo añadiendo una nueva entrada al diccionario. También maneja errores de extracción y devuelve None si no se puede extraer el valor."""
 def _extract_metric_value(
-    metrics: ServiceMetrics,
+    metrics: ServiceMetric,
     metric_type: MetricType,
 ) -> Optional[float]:   #Esta funcion recive 2 cosas, el paquete de metricas de un servicio y que tipo de metricas hay q buscar. Devuelve el numero decimal o nada si no lo encuentra
-    extractors: dict[MetricType, Callable[[ServiceMetrics], float]] = { #Crea un diccionario lamdas para usar mas tarde
+    extractors: dict[MetricType, Callable[[ServiceMetric], float]] = { #Crea un diccionario lamdas para usar mas tarde
         MetricType.CPU: lambda m: m.cpu_percent,
         MetricType.MEMORY: lambda m: m.memory_percent,
         MetricType.NETWORK: lambda m: m.net_latency_ms if m.net_latency_ms is not None else 0.0,
@@ -43,7 +43,7 @@ def _extract_metric_value(
 """Construye el mensaje de alerta basado en la regla y los valores de métrica"""
 def _build_alert_message(
     rule: AlertRule,
-    metrics: ServiceMetrics,
+    metrics: ServiceMetric,
     current_value: float,
 ) -> str:
     unit_map = {
@@ -79,23 +79,18 @@ class _CooldownTracker:
     def clear(self, key: str) -> None:
         self._last_fired.pop(key, None)
 
-
-# ─────────────────────────────────────────
 # ALERT ENGINE
-# ─────────────────────────────────────────
 
 class AlertEngine:
 
     def __init__(self) -> None:
-        self._rules: dict[str, AlertRule] = {}
-        self._active_events: dict[str, AlertEvent] = {}
-        self._event_history: list[AlertEvent] = []
-        self._cooldown = _CooldownTracker()
-        self._notifiers: list[Callable[[AlertEvent], None]] = []
+        self._rules: dict[str, AlertRule] = {} #Un diccionario de reglas configuradas con acceso O(1) para habilitar/deshabilitar individualmente
+        self._active_events: dict[str, AlertEvent] = {} #Alertas dipsaradas pero no resueltas
+        self._event_history: list[AlertEvent] = [] #Historial de eventos, limitado a 500
+        self._cooldown = _CooldownTracker() #la instancia del tracker de cooldown
+        self._notifiers: list[Callable[[AlertEvent], None]] = [] #Los callbacks de notificación
         self._lock = asyncio.Lock()
-
-    # ── Gestión de reglas ─────────────────
-
+    #Gestión de reglas
     def add_rule(self, rule: AlertRule) -> None:
         self._rules[rule.rule_id] = rule
         logger.info(
@@ -117,9 +112,7 @@ class AlertEngine:
             self._rules[rule_id] = self._rules[rule_id].model_copy(
                 update={"enabled": False}
             )
-
-    # ── Notificadores ─────────────────────
-
+    #Notificadores
     def add_notifier(self, callback: Callable[[AlertEvent], None]) -> None:
         self._notifiers.append(callback)
 
@@ -128,9 +121,7 @@ class AlertEngine:
             self._notifiers.remove(callback)
         except ValueError:
             pass
-
-    # ── Estado ────────────────────────────
-
+    #Estado
     @property
     def active_events(self) -> list[AlertEvent]:
         return list(self._active_events.values())
@@ -143,7 +134,7 @@ class AlertEngine:
     def rules(self) -> list[AlertRule]:
         return list(self._rules.values())
 
-    # ── Procesamiento de snapshots ─────────
+    #Procesamiento de snapshots
 
     async def process_snapshot(self, snapshot: MetricSnapshot) -> list[AlertEvent]:
         fired: list[AlertEvent] = []
@@ -163,7 +154,7 @@ class AlertEngine:
     async def _evaluate_rule(
         self,
         rule: AlertRule,
-        metrics: ServiceMetrics,
+        metrics: ServiceMetric,
     ) -> Optional[AlertEvent]:
 
         current_value = _extract_metric_value(metrics, rule.metric_type)
@@ -185,7 +176,7 @@ class AlertEngine:
                 current_value=round(current_value, 2),
                 threshold=rule.threshold,
                 severity=rule.severity,
-                status=AlertStatus.ACTIVE,
+                status=AlertStatus.ACTIVATE,
                 triggered_at=datetime.now(timezone.utc),
                 message=_build_alert_message(rule, metrics, current_value),
             )
@@ -206,7 +197,7 @@ class AlertEngine:
             await self._try_resolve(cooldown_key, metrics)
             return None
 
-    async def _try_resolve(self, cooldown_key: str, metrics: ServiceMetrics) -> None:
+    async def _try_resolve(self, cooldown_key: str, metrics: ServiceMetric) -> None:
         async with self._lock:
             active = self._active_events.get(cooldown_key)
             if active is None:
@@ -238,7 +229,7 @@ class AlertEngine:
             parts = key.split(":", 1)
             if len(parts) == 2:
                 service_id = parts[1]
-                fake_metrics = ServiceMetrics(
+                fake_metrics = ServiceMetric(
                     service_id=service_id,
                     service_name=service_id,
                     cpu_percent=0.0,

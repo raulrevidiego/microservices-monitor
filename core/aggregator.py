@@ -20,6 +20,8 @@ class ServiceConfig:
         "pids",
         "log_paths",
         "collect_interval",
+        "use_docker",
+        "container_name"
     )
 
     def __init__(
@@ -29,14 +31,16 @@ class ServiceConfig:
         pids: Optional[list[int]] = None,
         log_paths: Optional[list[str]] = None,
         collect_interval: float = 5.0,
+        use_docker: bool = False,
+        container_name: Optional[str] = None,
     ) -> None:
         self.service_id = service_id
         self.service_name = service_name
         self.pids = pids
         self.log_paths = log_paths or []
         self.collect_interval = collect_interval
-
-
+        self.use_docker = use_docker
+        self.container_name = container_name
 #Aggregator principal, son 4 estructuras de datos internas con distintos roles 
 class MetricsAggregator:
 
