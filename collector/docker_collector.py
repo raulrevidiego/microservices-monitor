@@ -23,7 +23,7 @@ def _get_docker_client() -> Optional[docker.DockerClient]:
     except docker.errors.DockerException as e:
         logger.warning("Docker no disponible: %s", e)
         return None
-#El client.ping cerififca que el daemon está realmente disponible, si no devulve un none
+#El client.ping certifca que el daemon está realmente disponible, si no devulve un none
 
 # PARSEO DE ESTADÍSTICAS, docker no te da el porcentaje de CPU, asi que hay que calcularlo. 
 
