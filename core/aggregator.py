@@ -6,6 +6,8 @@ from datetime import datetime, timezone
 from typing import Callable, Optional
 from uuid import uuid4
 
+from streamlit import config
+
 from collector.log_collector import collect_multiple_logs, collect_log_metrics
 from collector.process_collector import collect_process_metrics
 from core.models import MetricSnapshot, ServiceMetric
@@ -164,9 +166,14 @@ class MetricsAggregator:
     Al final usa model_copy(update={"error_count": error_count}),el método de Pydantic para crear una copia modificada del modelo sin mutar el original. 
     Los modelos Pydantic son inmutables por defecto, que es exactamente lo que queremos en un sistema concurrente."""
     async def _collect_service(self, config: ServiceConfig) -> ServiceMetric:
-
-        async def _empty_logs() -> tuple[int, list]: 
-            return 0, []
+        if config.use_docker:
+            from collector.docker_collector import collect_docker_metrics
+            results = await collect_docker_metrics(
+                container_names=[config.container_name] if config.container_name else None
+            )
+        
+            if results:
+                return results[0]
 
         metrics_task = asyncio.create_task(
             collect_process_metrics(
