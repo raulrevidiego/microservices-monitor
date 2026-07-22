@@ -166,6 +166,8 @@ class MetricsAggregator:
     Al final usa model_copy(update={"error_count": error_count}),el método de Pydantic para crear una copia modificada del modelo sin mutar el original. 
     Los modelos Pydantic son inmutables por defecto, que es exactamente lo que queremos en un sistema concurrente."""
     async def _collect_service(self, config: ServiceConfig) -> ServiceMetric:
+        async def _empty_logs() -> tuple[int, list]:
+            return 0, []
         if config.use_docker:
             from collector.docker_collector import collect_docker_metrics
             results = await collect_docker_metrics(
@@ -196,7 +198,7 @@ class MetricsAggregator:
 
         return metrics.model_copy(update={"error_count": error_count})
 
-    #Almacenamiento e histórico  ✅ indentación corregida (estaba con 2 espacios en vez de 4)
+    #Almacenamiento e histórico 
     async def _store_snapshot(self, snapshot: MetricSnapshot) -> None:
         async with self._lock:
             self._history.append(snapshot)
